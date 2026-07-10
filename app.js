@@ -63,7 +63,7 @@ function defaultParlor() {
     returnPts: 30000,    // 返し点(基準点)
     ptPer1000: 1,        // 1000点あたりのpt(レート)
     uma: [20, 10, -10, -20], // 着順ごとの順位点(1000点単位)
-    okaAuto: true,       // オカを1位に自動加算
+    okaAuto: false,      // オカを1位に自動加算(既定はOFF)
     chipPt: 1,           // チップ1枚あたりのpt
     gameFee: 0,          // 半荘ごとのゲーム代(pt)
     topPrize: 0,         // トップ賞(pt)

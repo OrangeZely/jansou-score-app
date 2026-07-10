@@ -140,10 +140,10 @@ const fmtDuration = (ms) => {
   const h = Math.floor(min / 60), m = min % 60;
   return h > 0 ? `${h}時間${m}分` : `${m}分`;
 };
-/* pt時給。プレイ時間が短すぎる間は「—」を返す */
+/* pt時給。1時間未満は獲得ptそのまま、1時間以上は1時間あたりのptにする */
 const hourlyPt = (pt, ms) => {
   const hours = ms / 3600000;
-  if (hours < 0.1) return null;
+  if (hours < 1) return pt;
   return Math.round(pt / hours);
 };
 

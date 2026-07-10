@@ -29,16 +29,40 @@ const DB = {
 
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
+/* 三麻/四麻ごとの既定値とウマのプリセット */
+const MODE_DEFAULTS = {
+  yonma: { startPts: 25000, returnPts: 30000, uma: [20, 10, -10, -20] },
+  sanma: { startPts: 35000, returnPts: 40000, uma: [15, 0, -15] },
+};
+const UMA_PRESETS = {
+  yonma: [
+    { label: 'ウマなし', v: [0, 0, 0, 0] },
+    { label: 'ゴットー 5-10', v: [10, 5, -5, -10] },
+    { label: 'ワンツー 10-20', v: [20, 10, -10, -20] },
+    { label: 'ワンスリー 10-30', v: [30, 10, -10, -30] },
+  ],
+  sanma: [
+    { label: 'ウマなし', v: [0, 0, 0] },
+    { label: '10-20', v: [20, 0, -20] },
+    { label: '10-15', v: [15, 0, -15] },
+    { label: '5-10', v: [10, 0, -10] },
+  ],
+};
+
+/* 店(ルール)の対局人数。三麻=3人・四麻=4人 */
+function playersOf(p) { return (p && p.mode === 'sanma') ? 3 : 4; }
+
 /* デフォルトの店設定 */
 function defaultParlor() {
   return {
     id: uid(),
     name: '',
     note: '',
+    mode: 'yonma',       // 'yonma'(四麻) / 'sanma'(三麻)
     startPts: 25000,     // 配給原点
     returnPts: 30000,    // 返し点(基準点)
     ptPer1000: 1,        // 1000点あたりのpt(レート)
-    uma: [20, 10, -10, -20], // 1〜4位の順位点(1000点単位)
+    uma: [20, 10, -10, -20], // 着順ごとの順位点(1000点単位)
     okaAuto: true,       // オカを1位に自動加算
     chipPt: 1,           // チップ1枚あたりのpt
     gameFee: 0,          // 半荘ごとのゲーム代(pt)
@@ -55,7 +79,7 @@ function calcHanchanPt(parlor, place, score, chipDelta) {
   const p = parlor;
   const soten = (score - p.returnPts) / 1000;               // 素点(1000点単位)
   const oka = (p.okaAuto && place === 1)
-    ? (p.returnPts - p.startPts) * 4 / 1000 : 0;            // オカ(1000点単位)
+    ? (p.returnPts - p.startPts) * playersOf(p) / 1000 : 0; // オカ(1000点単位・×人数)
   const uma = p.uma[place - 1] || 0;                         // 順位点(1000点単位)
   const scorePt = (soten + oka + uma) * p.ptPer1000;         // 点数由来のpt
   const chipPt = chipDelta * p.chipPt;                       // チップpt
@@ -148,7 +172,7 @@ function viewHome() {
     .sort((a, b) => b.startedAt - a.startedAt)
     .slice(0, 20);
 
-  let html = `<div class="page-head"><div><h1>雀成績</h1><div class="sub">雀荘の実績を記録</div></div></div>`;
+  let html = `<div class="page-head"><div><h1>雀荘成績管理</h1><div class="sub">雀荘の実績を記録</div></div></div>`;
 
   if (active) {
     const par = DB.parlor(active.parlorId);
@@ -201,7 +225,8 @@ function startSessionFlow() {
   let html = `<div class="page-head"><button class="back-btn" onclick="nav('home')">‹</button><h1>店を選ぶ</h1></div>`;
   for (const p of DB.data.parlors) {
     html += `<div class="card tap" onclick="doStartSession('${p.id}')">
-      <div style="font-weight:700;font-size:17px">${esc(p.name)}</div>
+      <div class="row"><div style="font-weight:700;font-size:17px">${esc(p.name)}</div>
+        <span class="pill" style="border-color:var(--green);color:var(--accent)">${p.mode === 'sanma' ? '三麻' : '四麻'}</span></div>
       <div class="muted small" style="margin-top:4px">${umaLabel(p)} • レート${p.ptPer1000} • チップ${p.chipPt}pt</div>
     </div>`;
   }
@@ -231,7 +256,7 @@ function viewSession() {
     <div class="page-head">
       <button class="back-btn" onclick="nav('home')">‹</button>
       <div><h1 style="font-size:19px">${esc(par ? par.name : '?')}</h1>
-      <div class="sub">${umaLabel(par)} • ${s.hanchans.length}半荘目</div></div>
+      <div class="sub">${par.mode === 'sanma' ? '三麻' : '四麻'} • ${umaLabel(par)} • ${s.hanchans.length}半荘目</div></div>
     </div>
 
     <div class="card">
@@ -257,8 +282,8 @@ function viewSession() {
 
     <div class="card">
       <div class="lbl" style="color:var(--muted);font-size:13px;margin-bottom:8px">着順</div>
-      <div class="rank-grid" id="rankGrid">
-        ${[1, 2, 3, 4].map(r => `<button class="rank-btn ${ss.place === r ? 'sel' : ''}" onclick="setEntry('${s.id}','place',${r})">${r}<small>${['位', '位', '位', '位'][r - 1]}</small></button>`).join('')}
+      <div class="rank-grid" id="rankGrid" style="grid-template-columns:repeat(${playersOf(par)},1fr)">
+        ${Array.from({ length: playersOf(par) }, (_, i) => i + 1).map(r => `<button class="rank-btn ${ss.place === r ? 'sel' : ''}" onclick="setEntry('${s.id}','place',${r})">${r}<small>位</small></button>`).join('')}
       </div>
       <label class="field" style="margin-top:14px">
         <span class="lbl">最終持ち点</span>
@@ -411,8 +436,8 @@ function viewEditHanchan() {
     </div>
     <div class="card">
       <div class="lbl" style="color:var(--muted);font-size:13px;margin-bottom:8px">着順</div>
-      <div class="rank-grid">
-        ${[1, 2, 3, 4].map(r => `<button class="rank-btn ${es.place === r ? 'sel' : ''}" onclick="setEditField('place',${r})">${r}<small>位</small></button>`).join('')}
+      <div class="rank-grid" style="grid-template-columns:repeat(${playersOf(par)},1fr)">
+        ${Array.from({ length: playersOf(par) }, (_, i) => i + 1).map(r => `<button class="rank-btn ${es.place === r ? 'sel' : ''}" onclick="setEditField('place',${r})">${r}<small>位</small></button>`).join('')}
       </div>
       <label class="field" style="margin-top:14px">
         <span class="lbl">最終持ち点</span>
@@ -485,8 +510,9 @@ function viewSessionDetail() {
   if (!s) return nav('home');
   const par = DB.parlor(s.parlorId);
   const dep = sessionDeposit(s);
-  const ranks = [0, 0, 0, 0];
-  s.hanchans.forEach(h => ranks[h.place - 1]++);
+  const players = playersOf(par);
+  const ranks = Array(players).fill(0);
+  s.hanchans.forEach(h => { if (h.place >= 1 && h.place <= players) ranks[h.place - 1]++; });
   const n = s.hanchans.length || 1;
   const avg = s.hanchans.reduce((a, h) => a + h.place, 0) / n;
   const durMs = (s.endedAt || s.startedAt) - s.startedAt;
@@ -542,6 +568,7 @@ function viewParlors() {
         <div class="row"><div style="font-weight:700;font-size:17px">${esc(p.name)}</div><span class="muted">›</span></div>
         ${p.note ? `<div class="muted small" style="margin:4px 0">${esc(p.note)}</div>` : ''}
         <div style="margin-top:8px">
+          <span class="pill" style="border-color:var(--green);color:var(--accent)">${p.mode === 'sanma' ? '三麻' : '四麻'}</span>
           <span class="pill">${umaLabel(p)}</span>
           <span class="pill">レート ${p.ptPer1000}</span>
           <span class="pill">チップ ${p.chipPt}pt</span>
@@ -561,21 +588,36 @@ function umaLabel(p) {
 }
 
 /* ---------- 店の追加・編集 ---------- */
+let editMode = 'yonma'; // 編集中の店の三麻/四麻
+
+function umaFieldsHtml(mode, uma) {
+  const players = mode === 'sanma' ? 3 : 4;
+  return Array.from({ length: players }, (_, i) =>
+    `<div><div class="lbl">${i + 1}位</div>
+      <input id="f_uma${i}" type="number" inputmode="numeric" class="center" value="${uma[i] != null ? uma[i] : 0}"></div>`).join('');
+}
+function umaPresetOptions(mode) {
+  return `<option value="">プリセットを選択…</option>` +
+    UMA_PRESETS[mode].map((u, i) => `<option value="${i}">${u.label}</option>`).join('');
+}
+
 function viewParlorEdit() {
   const isNew = route.param === 'new';
   const p = isNew ? defaultParlor() : { ...DB.parlor(route.param) };
   if (!p) return nav('parlors');
-
-  const umaPresets = [
-    { label: 'ウマなし', v: [0, 0, 0, 0] },
-    { label: 'ゴットー 5-10', v: [10, 5, -5, -10] },
-    { label: 'ワンツー 10-20', v: [20, 10, -10, -20] },
-    { label: 'ワンスリー 10-30', v: [30, 10, -10, -30] },
-  ];
+  if (!p.mode) p.mode = 'yonma';
+  editMode = p.mode;
+  window._umaPresets = UMA_PRESETS[p.mode];
 
   let html = `
     <div class="page-head"><button class="back-btn" onclick="nav('parlors')">‹</button>
       <h1>${isNew ? '店を追加' : '店を編集'}</h1></div>
+
+    <div class="mode-tabs">
+      <button class="mode-tab ${p.mode === 'yonma' ? 'active' : ''}" data-mode="yonma" onclick="setParlorMode('yonma')">四麻</button>
+      <button class="mode-tab ${p.mode === 'sanma' ? 'active' : ''}" data-mode="sanma" onclick="setParlorMode('sanma')">三麻</button>
+    </div>
+
     <div class="card">
       <label class="field"><span class="lbl">店名</span>
         <input id="f_name" value="${esc(p.name)}" placeholder="例: まぁじゃん○○ 天神店"></label>
@@ -594,13 +636,9 @@ function viewParlorEdit() {
       <label class="field"><span class="lbl">1000点あたりのpt <span class="hint">(レート)</span></span>
         <input id="f_rate" type="number" inputmode="decimal" step="0.1" value="${p.ptPer1000}"></label>
       <label class="field" style="margin-bottom:6px"><span class="lbl">ウマ (順位点・1000点単位)</span></label>
-      <select id="f_umaPreset" onchange="applyUmaPreset(this.value)">
-        <option value="">プリセットを選択…</option>
-        ${umaPresets.map((u, i) => `<option value="${i}">${u.label}</option>`).join('')}
-      </select>
-      <div class="uma-grid" style="margin-top:10px">
-        ${[0, 1, 2, 3].map(i => `<div><div class="lbl">${i + 1}位</div>
-          <input id="f_uma${i}" type="number" inputmode="numeric" class="center" value="${p.uma[i]}"></div>`).join('')}
+      <select id="f_umaPreset" onchange="applyUmaPreset(this.value)">${umaPresetOptions(p.mode)}</select>
+      <div class="uma-grid" id="umaFields" style="margin-top:10px;grid-template-columns:repeat(${playersOf(p)},1fr)">
+        ${umaFieldsHtml(p.mode, p.uma)}
       </div>
       <label class="field" style="margin-top:14px;display:flex;align-items:center;gap:10px;flex-direction:row">
         <input type="checkbox" id="f_oka" style="width:auto" ${p.okaAuto ? 'checked' : ''}>
@@ -623,25 +661,41 @@ function viewParlorEdit() {
     ${!isNew ? `<button class="btn danger" style="margin-top:10px" onclick="deleteParlor('${p.id}')">この店を削除</button>` : ''}
   `;
   app.innerHTML = html;
-  window._umaPresets = umaPresets;
+}
+
+/* 三麻/四麻の切替。既定の配給原点・返し点・ウマを反映し、ウマ欄を作り直す */
+function setParlorMode(mode) {
+  if (mode === editMode) return;
+  editMode = mode;
+  document.querySelectorAll('.mode-tab').forEach(t => t.classList.toggle('active', t.dataset.mode === mode));
+  const d = MODE_DEFAULTS[mode];
+  if ($('#f_start')) $('#f_start').value = d.startPts;
+  if ($('#f_return')) $('#f_return').value = d.returnPts;
+  const wrap = $('#umaFields');
+  wrap.style.gridTemplateColumns = `repeat(${mode === 'sanma' ? 3 : 4},1fr)`;
+  wrap.innerHTML = umaFieldsHtml(mode, d.uma);
+  $('#f_umaPreset').innerHTML = umaPresetOptions(mode);
+  window._umaPresets = UMA_PRESETS[mode];
 }
 
 function applyUmaPreset(i) {
   if (i === '') return;
   const v = window._umaPresets[i].v;
-  [0, 1, 2, 3].forEach(k => $('#f_uma' + k).value = v[k]);
+  v.forEach((val, k) => { const el = $('#f_uma' + k); if (el) el.value = val; });
 }
 
 function saveParlor(id) {
   const name = $('#f_name').value.trim();
   if (!name) { toast('店名を入力してください'); return; }
+  const players = editMode === 'sanma' ? 3 : 4;
   const obj = {
     name,
     note: $('#f_note').value.trim(),
-    startPts: parseInt($('#f_start').value) || 25000,
-    returnPts: parseInt($('#f_return').value) || 30000,
+    mode: editMode,
+    startPts: parseInt($('#f_start').value) || MODE_DEFAULTS[editMode].startPts,
+    returnPts: parseInt($('#f_return').value) || MODE_DEFAULTS[editMode].returnPts,
     ptPer1000: parseFloat($('#f_rate').value) || 1,
-    uma: [0, 1, 2, 3].map(i => parseInt($('#f_uma' + i).value) || 0),
+    uma: Array.from({ length: players }, (_, i) => parseInt($('#f_uma' + i).value) || 0),
     okaAuto: $('#f_oka').checked,
     chipPt: parseFloat($('#f_chip').value) || 0,
     gameFee: parseInt($('#f_fee').value) || 0,
@@ -667,23 +721,41 @@ function deleteParlor(id) {
 }
 
 /* ---------- 成績(統計) ---------- */
+let statsMode = null; // 表示中の三麻/四麻。初回に自動決定
+
+function modeOfSession(s) { return playersOf(DB.parlor(s.parlorId)) === 3 ? 'sanma' : 'yonma'; }
+
 function viewStats() {
-  const closed = DB.data.sessions.filter(s => s.status === 'closed');
-  let html = `<div class="page-head"><div><h1>成績</h1><div class="sub">通算のトータル収支</div></div></div>`;
+  const closedAll = DB.data.sessions.filter(s => s.status === 'closed');
+
+  // 初回表示: データのあるモードを優先
+  if (statsMode == null) {
+    const hasYonma = closedAll.some(s => modeOfSession(s) === 'yonma');
+    statsMode = (!hasYonma && closedAll.some(s => modeOfSession(s) === 'sanma')) ? 'sanma' : 'yonma';
+  }
+
+  let html = `<div class="page-head"><div><h1>成績</h1><div class="sub">通算のトータル収支</div></div></div>
+    <div class="mode-tabs">
+      <button class="mode-tab ${statsMode === 'yonma' ? 'active' : ''}" onclick="statsMode='yonma';render()">四麻</button>
+      <button class="mode-tab ${statsMode === 'sanma' ? 'active' : ''}" onclick="statsMode='sanma';render()">三麻</button>
+    </div>`;
+
+  const players = statsMode === 'sanma' ? 3 : 4;
+  const closed = closedAll.filter(s => modeOfSession(s) === statsMode);
 
   if (closed.length === 0) {
-    html += `<div class="empty"><div class="em-ic">📊</div><div>まだ集計できる記録がありません</div></div>`;
+    html += `<div class="empty"><div class="em-ic">📊</div><div>${statsMode === 'sanma' ? '三麻' : '四麻'}の記録がまだありません</div></div>`;
     app.innerHTML = html; return;
   }
 
   const allHc = closed.flatMap(s => s.hanchans);
   const total = allHc.reduce((a, h) => a + h.total, 0);
   const nHc = allHc.length;
-  const ranks = [0, 0, 0, 0];
-  allHc.forEach(h => ranks[h.place - 1]++);
+  const ranks = Array(players).fill(0);
+  allHc.forEach(h => { if (h.place >= 1 && h.place <= players) ranks[h.place - 1]++; });
   const avg = allHc.reduce((a, h) => a + h.place, 0) / (nHc || 1);
   const topRate = (ranks[0] / (nHc || 1) * 100);
-  const lastRate = (ranks[3] / (nHc || 1) * 100);
+  const lastRate = (ranks[players - 1] / (nHc || 1) * 100);
   const rentai = ((ranks[0] + ranks[1]) / (nHc || 1) * 100);
   const totalMs = closed.reduce((a, s) => a + ((s.endedAt || s.startedAt) - s.startedAt), 0);
   const overallHr = hourlyPt(total, totalMs);
@@ -691,10 +763,9 @@ function viewStats() {
   // 店別集計
   const byParlor = {};
   closed.forEach(s => {
-    const key = s.parlorId;
-    if (!byParlor[key]) byParlor[key] = { pt: 0, hc: 0 };
-    byParlor[key].pt += sessionDeposit(s);
-    byParlor[key].hc += s.hanchans.length;
+    if (!byParlor[s.parlorId]) byParlor[s.parlorId] = { pt: 0, hc: 0 };
+    byParlor[s.parlorId].pt += sessionDeposit(s);
+    byParlor[s.parlorId].hc += s.hanchans.length;
   });
 
   html += `<div class="card"><div class="deposit-wrap">

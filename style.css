@@ -42,6 +42,18 @@ body {
 .sync-btn:active { filter: brightness(1.1); }
 code { background: var(--surface-2); padding: 1px 5px; border-radius: 5px; font-size: .92em; }
 
+/* 三麻/四麻 セグメントタブ */
+.mode-tabs {
+  display: flex; gap: 6px; background: var(--surface-2); border: 1px solid var(--line);
+  border-radius: 12px; padding: 4px; margin-bottom: 14px;
+}
+.mode-tab {
+  flex: 1; border: none; background: transparent; color: var(--muted);
+  font-size: 15px; font-weight: 700; padding: 10px 0; border-radius: 9px; cursor: pointer;
+  font-family: inherit;
+}
+.mode-tab.active { background: var(--green); color: #fff; }
+
 /* Cards */
 .card {
   background: var(--surface); border: 1px solid var(--line);

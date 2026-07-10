@@ -148,10 +148,7 @@ function viewHome() {
     .sort((a, b) => b.startedAt - a.startedAt)
     .slice(0, 20);
 
-  let html = `<div class="page-head" style="justify-content:space-between">
-    <div><h1>雀成績</h1><div class="sub">雀荘の実績を記録</div></div>
-    <button class="sync-btn" onclick="nav('account')">${cloudBadge()}</button>
-  </div>`;
+  let html = `<div class="page-head"><div><h1>雀成績</h1><div class="sub">雀荘の実績を記録</div></div></div>`;
 
   if (active) {
     const par = DB.parlor(active.parlorId);

@@ -15,8 +15,13 @@ const DB = {
     } catch (e) { console.warn('load failed', e); }
     if (!this.data.parlors) this.data.parlors = [];
     if (!this.data.sessions) this.data.sessions = [];
+    if (!this.data.updatedAt) this.data.updatedAt = 0;
   },
-  save() { localStorage.setItem(STORE_KEY, JSON.stringify(this.data)); },
+  save() {
+    this.data.updatedAt = Date.now();
+    localStorage.setItem(STORE_KEY, JSON.stringify(this.data));
+    if (typeof Cloud !== 'undefined') Cloud.schedulePush();
+  },
   parlor(id) { return this.data.parlors.find(p => p.id === id); },
   session(id) { return this.data.sessions.find(s => s.id === id); },
   activeSession() { return this.data.sessions.find(s => s.status === 'open'); },
@@ -131,7 +136,7 @@ function toast(msg) {
 function render() {
   const map = { home: viewHome, parlors: viewParlors, parlorEdit: viewParlorEdit,
     session: viewSession, stats: viewStats, sessionDetail: viewSessionDetail,
-    editHanchan: viewEditHanchan };
+    editHanchan: viewEditHanchan, account: viewAccount };
   (map[route.name] || viewHome)();
 }
 
@@ -143,7 +148,10 @@ function viewHome() {
     .sort((a, b) => b.startedAt - a.startedAt)
     .slice(0, 20);
 
-  let html = `<div class="page-head"><div><h1>雀成績</h1><div class="sub">雀荘の実績を記録</div></div></div>`;
+  let html = `<div class="page-head" style="justify-content:space-between">
+    <div><h1>雀成績</h1><div class="sub">雀荘の実績を記録</div></div>
+    <button class="sync-btn" onclick="nav('account')">${cloudBadge()}</button>
+  </div>`;
 
   if (active) {
     const par = DB.parlor(active.parlorId);
@@ -732,6 +740,197 @@ function viewStats() {
   app.innerHTML = html;
 }
 
+/* ============================================================
+   クラウド同期 (Supabase)
+   未設定・未ログイン時は何もせず localStorage のみで動作する。
+   ============================================================ */
+const Cloud = {
+  client: null,
+  user: null,
+  status: 'off',       // off(未設定) / anon(未ログイン) / syncing / on / error
+  pushTimer: null,
+
+  configured() {
+    const c = window.JANSOU_CONFIG || {};
+    return !!(c.SUPABASE_URL && c.SUPABASE_ANON_KEY && window.supabase);
+  },
+
+  async init() {
+    if (!this.configured()) { this.status = 'off'; return; }
+    try {
+      this.client = window.supabase.createClient(
+        window.JANSOU_CONFIG.SUPABASE_URL, window.JANSOU_CONFIG.SUPABASE_ANON_KEY);
+      const { data } = await this.client.auth.getSession();
+      this.user = data.session ? data.session.user : null;
+      this.status = this.user ? 'on' : 'anon';
+      this.client.auth.onAuthStateChange((_e, session) => {
+        const wasUser = this.user;
+        this.user = session ? session.user : null;
+        this.status = this.user ? 'on' : 'anon';
+        if (this.user && !wasUser) this.pullAndMerge();
+        else if (['home', 'account'].includes(route.name)) render();
+      });
+      if (this.user) await this.pullAndMerge();
+      else if (['home', 'account'].includes(route.name)) render();
+    } catch (e) {
+      console.warn('Cloud init failed', e);
+      this.status = 'error';
+    }
+  },
+
+  async sendCode(email) {
+    return this.client.auth.signInWithOtp({ email, options: { shouldCreateUser: true } });
+  },
+  async verify(email, token) {
+    return this.client.auth.verifyOtp({ email, token, type: 'email' });
+  },
+  async signOut() {
+    await this.client.auth.signOut();
+    this.user = null; this.status = 'anon';
+    if (['home', 'account'].includes(route.name)) render();
+  },
+
+  /* リモートとローカルを updatedAt で比較し、新しい方を採用 */
+  async pullAndMerge() {
+    if (!this.user) return;
+    this.status = 'syncing';
+    if (['home', 'account'].includes(route.name)) render();
+    try {
+      const { data, error } = await this.client
+        .from('app_state').select('data').eq('user_id', this.user.id).maybeSingle();
+      if (error) throw error;
+      if (data && data.data && Object.keys(data.data).length) {
+        const remote = data.data;
+        const remoteAt = remote.updatedAt || 0;
+        const localAt = DB.data.updatedAt || 0;
+        if (remoteAt >= localAt) {
+          DB.data = remote;
+          if (!DB.data.parlors) DB.data.parlors = [];
+          if (!DB.data.sessions) DB.data.sessions = [];
+          localStorage.setItem(STORE_KEY, JSON.stringify(DB.data));
+        } else {
+          await this._upsert();
+        }
+      } else {
+        await this._upsert(); // リモートが空 → ローカルを初期投入
+      }
+      this.status = 'on';
+    } catch (e) {
+      console.warn('pull failed', e);
+      this.status = 'error';
+    }
+    render();
+  },
+
+  schedulePush() {
+    if (!this.user) return;
+    clearTimeout(this.pushTimer);
+    this.pushTimer = setTimeout(() => this._upsert(), 1200);
+  },
+  async _upsert() {
+    if (!this.user) return;
+    try {
+      const { error } = await this.client.from('app_state').upsert({
+        user_id: this.user.id, data: DB.data, updated_at: new Date().toISOString(),
+      });
+      if (error) throw error;
+    } catch (e) { console.warn('push failed', e); }
+  },
+};
+
+function cloudBadge() {
+  const map = {
+    off:     ['☁️', 'ローカル', 'var(--muted)'],
+    anon:    ['🔒', 'ログイン', 'var(--muted)'],
+    syncing: ['🔄', '同期中', 'var(--accent)'],
+    on:      ['✅', '同期中', 'var(--green)'],
+    error:   ['⚠️', 'エラー', 'var(--danger)'],
+  };
+  const [ic, label, col] = map[Cloud.status] || map.off;
+  return `<span style="color:${col}">${ic} ${label}</span>`;
+}
+
+/* ---------- アカウント / 同期画面 ---------- */
+let authFlow = { email: '', sent: false };
+
+function viewAccount() {
+  let html = `<div class="page-head"><button class="back-btn" onclick="nav('home')">‹</button><h1>同期 / アカウント</h1></div>`;
+
+  if (!Cloud.configured()) {
+    html += `<div class="card">
+      <div style="font-weight:700;margin-bottom:6px">☁️ クラウド同期は未設定です</div>
+      <div class="muted small" style="line-height:1.7">
+        今はこの端末内(localStorage)にのみ保存されています。<br>
+        複数端末で同期するには Supabase の設定が必要です。<br>
+        <code>config.js</code> に Supabase の URL と anon キーを設定してください。
+      </div></div>
+      <div class="card"><b>設定手順</b><ol class="muted small" style="line-height:1.9;padding-left:20px">
+        <li>supabase.com でプロジェクトを作成</li>
+        <li>SQL Editor で <code>supabase/schema.sql</code> を実行</li>
+        <li>Settings → API から URL と anon キーをコピー</li>
+        <li><code>config.js</code> に貼り付け</li>
+      </ol></div>`;
+    app.innerHTML = html;
+    return;
+  }
+
+  if (Cloud.user) {
+    html += `<div class="card">
+      <div class="row"><span class="muted small">ログイン中</span>${cloudBadge()}</div>
+      <div style="font-weight:700;font-size:17px;margin:8px 0">${esc(Cloud.user.email || '')}</div>
+      <div class="muted small">このメールで他の端末にログインすると同じ成績が同期されます。</div>
+    </div>
+    <button class="btn ghost" onclick="Cloud.pullAndMerge()">今すぐ同期する</button>
+    <button class="btn danger" style="margin-top:10px" onclick="Cloud.signOut()">サインアウト</button>`;
+    app.innerHTML = html;
+    return;
+  }
+
+  // 未ログイン: メールOTP
+  if (!authFlow.sent) {
+    html += `<div class="card">
+      <div style="font-weight:700;margin-bottom:6px">🔒 ログインして同期</div>
+      <div class="muted small" style="margin-bottom:12px">メールアドレスに6桁の確認コードを送ります。パスワード不要です。</div>
+      <label class="field"><span class="lbl">メールアドレス</span>
+        <input id="authEmail" type="email" inputmode="email" placeholder="you@example.com" value="${esc(authFlow.email)}"></label>
+      <button class="btn accent" onclick="sendLoginCode()">確認コードを送る</button>
+    </div>`;
+  } else {
+    html += `<div class="card">
+      <div style="font-weight:700;margin-bottom:6px">📧 コードを入力</div>
+      <div class="muted small" style="margin-bottom:12px">${esc(authFlow.email)} に届いた6桁のコードを入力してください。</div>
+      <label class="field"><span class="lbl">確認コード</span>
+        <input id="authCode" class="score-input mono" type="text" inputmode="numeric" placeholder="123456" maxlength="6"></label>
+      <button class="btn accent" onclick="verifyLoginCode()">ログイン</button>
+      <button class="btn ghost" style="margin-top:10px" onclick="authFlow.sent=false;render()">メールを入力し直す</button>
+    </div>`;
+  }
+  app.innerHTML = html;
+}
+
+async function sendLoginCode() {
+  const email = ($('#authEmail').value || '').trim();
+  if (!email || !email.includes('@')) { toast('メールアドレスを入力してください'); return; }
+  authFlow.email = email;
+  toast('送信中…');
+  const { error } = await Cloud.sendCode(email);
+  if (error) { toast('送信に失敗しました'); console.warn(error); return; }
+  authFlow.sent = true;
+  render();
+}
+
+async function verifyLoginCode() {
+  const token = ($('#authCode').value || '').trim();
+  if (token.length < 6) { toast('6桁のコードを入力してください'); return; }
+  toast('確認中…');
+  const { error } = await Cloud.verify(authFlow.email, token);
+  if (error) { toast('コードが正しくありません'); console.warn(error); return; }
+  authFlow = { email: '', sent: false };
+  toast('ログインしました');
+  nav('home');
+}
+
 /* ---------- 起動 ---------- */
 DB.load();
 nav('home');
+Cloud.init();

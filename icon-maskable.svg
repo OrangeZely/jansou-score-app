@@ -1,0 +1,30 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1c7a4f"/>
+      <stop offset="1" stop-color="#0a3a28"/>
+    </linearGradient>
+    <linearGradient id="face" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#f0e9d8"/>
+    </linearGradient>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="10" stdDeviation="14" flood-color="#000000" flood-opacity="0.28"/>
+    </filter>
+  </defs>
+
+  <!-- 背景（フチまで塗る＝マスク対応） -->
+  <rect x="0" y="0" width="512" height="512" fill="url(#bg)"/>
+
+  <!-- 牌（安全域内に収める） -->
+  <g filter="url(#shadow)">
+    <rect x="160" y="140" width="192" height="258" rx="27" fill="#cdbf9c"/>
+    <rect x="160" y="131" width="192" height="258" rx="27" fill="url(#face)"/>
+    <rect x="160" y="131" width="192" height="258" rx="27" fill="none" stroke="#d8cdb2" stroke-width="3"/>
+  </g>
+
+  <!-- 中（赤・三元牌） -->
+  <text x="256" y="262" text-anchor="middle" dominant-baseline="central"
+        font-family="'Hiragino Sans','Hiragino Kaku Gothic ProN','Noto Sans JP',sans-serif"
+        font-weight="700" font-size="176" fill="#c8302a">中</text>
+</svg>

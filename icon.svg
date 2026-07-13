@@ -1,0 +1,33 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1c7a4f"/>
+      <stop offset="1" stop-color="#0a3a28"/>
+    </linearGradient>
+    <linearGradient id="face" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#f0e9d8"/>
+    </linearGradient>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="10" stdDeviation="14" flood-color="#000000" flood-opacity="0.28"/>
+    </filter>
+  </defs>
+
+  <!-- 背景（雀卓の緑・角丸スクエア） -->
+  <rect x="0" y="0" width="512" height="512" rx="116" fill="url(#bg)"/>
+  <rect x="0" y="0" width="512" height="512" rx="116" fill="none" stroke="#ffffff" stroke-opacity="0.06" stroke-width="4"/>
+
+  <!-- 牌 -->
+  <g filter="url(#shadow)">
+    <!-- 牌の厚み -->
+    <rect x="149" y="122" width="214" height="288" rx="30" fill="#cdbf9c"/>
+    <!-- 牌の表面 -->
+    <rect x="149" y="112" width="214" height="288" rx="30" fill="url(#face)"/>
+    <rect x="149" y="112" width="214" height="288" rx="30" fill="none" stroke="#d8cdb2" stroke-width="3"/>
+  </g>
+
+  <!-- 中（赤・三元牌） -->
+  <text x="256" y="256" text-anchor="middle" dominant-baseline="central"
+        font-family="'Hiragino Sans','Hiragino Kaku Gothic ProN','Noto Sans JP',sans-serif"
+        font-weight="700" font-size="196" fill="#c8302a">中</text>
+</svg>

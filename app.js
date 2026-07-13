@@ -998,7 +998,28 @@ async function verifyLoginCode() {
   nav('home');
 }
 
+/* ============================================================
+   LINEミニアプリ (LIFF)
+   LIFF_ID 未設定 or LINE外では通常のWebアプリとして動作する。
+   ============================================================ */
+const Liff = {
+  ready: false,
+  inClient: false,
+  async init() {
+    const id = (window.JANSOU_CONFIG || {}).LIFF_ID;
+    if (!id || typeof liff === 'undefined') return;
+    try {
+      await liff.init({ liffId: id });
+      this.ready = true;
+      this.inClient = liff.isInClient();
+    } catch (e) {
+      console.warn('LIFF init failed', e);
+    }
+  },
+};
+
 /* ---------- 起動 ---------- */
 DB.load();
 nav('home');
 Cloud.init();
+Liff.init();

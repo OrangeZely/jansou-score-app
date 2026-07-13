@@ -13,4 +13,10 @@
 window.JANSOU_CONFIG = {
   SUPABASE_URL: "",
   SUPABASE_ANON_KEY: "",
+
+  /* LINEミニアプリ / LIFFアプリのID。
+     LINE Developers Console で発行した LIFF ID を入れると、
+     LINE内で開いたときに LIFF として初期化されます。
+     空ならLIFFは無効(通常のWebアプリとして動作)。 */
+  LIFF_ID: "",
 };
